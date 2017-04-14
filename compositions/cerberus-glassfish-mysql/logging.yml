@@ -1,0 +1,87 @@
+# Cerberus Copyright (C) 2016 Cerberus Testing
+# DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+#
+# This file is part of Cerberus.
+#
+# Cerberus is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Cerberus is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Cerberus. If not, see <http://www.gnu.org/licenses/>.
+# Cerberus Glassfish MySQL composition.
+
+# Allows the option to run Cerberus with a logging/dashboard stack
+# To use run
+#
+# docker-compose -f docker-compose.yml -f logging.yml up
+#
+# In case of problems with subsequent runs use the --force-recreate option
+# i.e. docker-compose -f docker-compose.yml -f logging.yml up --force-recreate
+#
+# Runs a logging framework linked to the Cerberus docker composition
+# A single instance of Elasticsearch to store the logs
+# A Logstash instance to process the Cerberus logs into Elasticsearch
+# Kibana instance pointing to Elasticsearch for dashboarding
+#
+# Elasticsearch is configured as a small standalone node.
+# Memory is set to 1g and can be altered in logging.yml file if required.
+# The host machine may need to be configured to support elasticsearch i.e.
+# set vm.max_map_count=262144 in /etc/sysctl.conf
+# There is a index housekeeping job that runs every hour to delete old indicies.
+# The default is to delete indicies older than 3 days but this can be adjusted
+# in the deleteoldindicies.sh script in the elasticsearch folder.
+#
+# Kibana can be accessed on localhost:5601
+# On initial run it will ask for an index pattern, the deafaults of logstash-* and @timestamp are ok, so just click the create button.
+#
+version: '2'
+
+services:
+  elasticsearch:
+    build: elasticsearch/
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      ES_JAVA_OPTS: "-Xms1g -Xmx1g"
+    volumes:
+      - ./localdata/elasticsearch:/usr/share/elasticsearch/data
+    networks:
+      - docker_elk
+
+  logstash:
+    build: logstash/
+    command: -f /etc/logstash/conf.d/
+    volumes:
+      - ./logstash/config:/etc/logstash/conf.d
+      - ./logstash/config:/usr/share/logstash/config/log4j2.properties
+      - ./localdata/logs:/logdata
+      - ./localdata/logstash:/var/log/logstash
+    ports:
+      - "5000:5000"
+    networks:
+      - docker_elk
+    depends_on:
+      - elasticsearch
+
+  kibana:
+    build: kibana/
+    volumes:
+      - ./kibana/config/:/etc/kibana/
+    ports:
+      - "5601:5601"
+    networks:
+      - docker_elk
+    depends_on:
+      - elasticsearch
+
+networks:
+  docker_elk:
+    driver: bridge
